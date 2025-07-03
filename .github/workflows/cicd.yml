@@ -103,7 +103,7 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Tag Git Version
-        if: success()
+        if: success() && env.IS_RELEASE == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -111,6 +111,7 @@ jobs:
           git config user.email github-actions@github.com
           git tag "v$VERSION"
           git push origin "v$VERSION"
+      
 
       - name: Slack - Deploy Success
         if: success()
