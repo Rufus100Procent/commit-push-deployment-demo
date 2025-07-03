@@ -86,7 +86,7 @@ jobs:
         with:
           status: ${{ job.status }}
           channel: '#keja-ci-cd-updates'
-          message: |
+          message: | 
             {{#if (eq jobStatus "success")}}
             {{#if (eq env.FLY_API_TOKEN "${{ env.FLY_PROD_API_TOKEN }}")}}
             🚀 *Production Deploy Successful*
