@@ -34,7 +34,7 @@ jobs:
             VERSION=$(echo "$MSG" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
             IS_RELEASE=true
           else
-            BASE=$(git tag --sort=-v:refname | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 | sed 's/v//')
+            BASE=$(git tag --sort=-v:refname | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 | sed 's/v//' | sed 's/-dev//g')
             [ -z "$BASE" ] && BASE=$DEFAULT_VERSION
             VERSION="${BASE}-dev"
           fi
@@ -60,7 +60,7 @@ jobs:
           channel: '#keja-ci-cd-updates'
           message: |
             ❌ *Test stage failed*
-            • No version deployed
+            • Version: -
 
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
