@@ -1,0 +1,106 @@
+name: Build & Deploy Spring Boot
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      DEFAULT_VERSION: "0.1.1"
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      FLY_DEV_API_TOKEN: ${{ secrets.FLY_DEV_API_TOKEN }}
+      FLY_PROD_API_TOKEN: ${{ secrets.FLY_PROD_API_TOKEN }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          tags: true
+
+      - name: Determine Version and Release Type
+        id: version
+        run: |
+          MSG="${{ github.event.head_commit.message }}"
+          echo "Commit message: $MSG"
+
+          IS_RELEASE=false
+
+          if echo "$MSG" | grep -qE "^Release: [0-9]+\.[0-9]+\.[0-9]+"; then
+            VERSION=$(echo "$MSG" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+            IS_RELEASE=true
+          else
+            BASE=$(git tag --sort=-v:refname | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 | sed 's/v//')
+            [ -z "$BASE" ] && BASE=$DEFAULT_VERSION
+            VERSION="${BASE}-dev-$(date +%s)"
+          fi
+
+          echo "is_release=$IS_RELEASE" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '17'
+
+      - name: Run Maven Tests
+        run: mvn test
+
+      - name: Setup Fly
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to Fly.io
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          IS_RELEASE=${{ steps.version.outputs.is_release }}
+
+          CONFIG="fly.dev.toml"
+          TOKEN=${{ env.FLY_DEV_API_TOKEN }}
+          TYPE="Development"
+
+          if [ "$IS_RELEASE" = "true" ]; then
+            CONFIG="fly.production.toml"
+            TOKEN=${{ env.FLY_PROD_API_TOKEN }}
+            TYPE="🚨 *Production*"
+          fi
+
+          echo "Deploying $VERSION using $CONFIG"
+          FLY_API_TOKEN=$TOKEN flyctl deploy --config $CONFIG --remote-only
+
+      - name: Tag Git Version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+
+      - name: Slack Notify
+        uses: act10ns/slack@v2
+        with:
+          status: ${{ job.status }}
+          channel: '#keja-ci-cd-updates'
+          message: |
+            {{#if (eq jobStatus "success")}}
+            {{#if (eq env.FLY_API_TOKEN "${{ env.FLY_PROD_API_TOKEN }}")}}
+            🚀 *Production Deploy Successful*
+            • Version: *v${{ steps.version.outputs.version }}*
+            • Config: `fly.production.toml`
+            {{else}}
+            ✅ *Dev Deploy Successful*
+            • Version: *v${{ steps.version.outputs.version }}*
+            • Config: `fly.dev.toml`
+            {{/if}}
+            {{else}}
+            ❌ *Deploy Failed*
+            • Version: *v${{ steps.version.outputs.version }}*
+            {{/if}}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        if: always()
