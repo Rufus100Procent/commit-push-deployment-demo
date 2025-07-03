@@ -96,7 +96,7 @@ jobs:
           status: failure
           channel: '#keja-ci-cd-updates'
           message: |
-            ❌ *${{ env.DEPLOY_TYPE == 'prod' && 'Production' || 'Dev' }} deploy failed*
+            :x: *${{ env.DEPLOY_TYPE == 'prod' && 'Production' || 'Dev' }} deploy failed*
             • Version: v${{ env.VERSION }}
 
         env:
@@ -123,7 +123,7 @@ jobs:
             :rocket: *New production app has been released*
             • Version: *v{{ env.VERSION }}*
             {{else}}
-            ✅ *Dev version deployed*
+            :white_check_mark: *New Dev version has been Released*
             • Version: *v{{ env.VERSION }}*
             {{/if}}
 
