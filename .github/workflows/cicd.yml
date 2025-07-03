@@ -2,108 +2,124 @@ name: Build & Deploy Spring Boot
 
 on:
   push:
-    branches: [master]
+    branches:
+      - master
+
+env:
+  DEFAULT_VERSION: "0.1.1"
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+  FLY_DEV_API_TOKEN:  ${{ secrets.FLY_DEV_API_TOKEN }}
+  FLY_PROD_API_TOKEN: ${{ secrets.FLY_PROD_API_TOKEN }}
 
 jobs:
-  deploy:
+  build-deploy:
     runs-on: ubuntu-latest
 
-    env:
-      DEFAULT_VERSION: "0.1.1"
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-      FLY_DEV_API_TOKEN: ${{ secrets.FLY_DEV_API_TOKEN }}
-      FLY_PROD_API_TOKEN: ${{ secrets.FLY_PROD_API_TOKEN }}
-
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          fetch-tags: true
+          fetch-tags:  true
 
-      - name: Determine Version and Release Type
+      - name: Determine version / release type
         id: version
+        shell: bash
         run: |
           MSG="${{ github.event.head_commit.message }}"
-          echo "Commit message: $MSG"
-
           IS_RELEASE=false
-
-          if echo "$MSG" | grep -qE "^Release: [0-9]+\.[0-9]+\.[0-9]+"; then
+          if echo "$MSG" | grep -qE '^Release: [0-9]+\.[0-9]+\.[0-9]+'; then
             VERSION=$(echo "$MSG" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
             IS_RELEASE=true
           else
-            BASE=$(git tag --sort=-v:refname | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 | sed 's/v//')
+            BASE=$(git tag --list --sort=-v:refname |
+                   grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 | sed 's/^v//')
             [ -z "$BASE" ] && BASE=$DEFAULT_VERSION
             VERSION="${BASE}-dev"
           fi
+          echo "version=$VERSION"      >> "$GITHUB_OUTPUT"
+          echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
 
-          echo "is_release=$IS_RELEASE" >> $GITHUB_OUTPUT
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      - name: Mark stage = tests
+        run: echo "STAGE=tests" >> "$GITHUB_ENV"
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'corretto'
+          distribution: corretto
           java-version: '17'
 
-      - name: Run Maven Tests
-        id: test
-        run: mvn test
+      - name: Run Maven tests
+        run: mvn -B test
+
+      - name: Mark stage = deploy
+        if: success()
+        run: echo "STAGE=deploy" >> "$GITHUB_ENV"
 
       - name: Setup Fly
+        if: success()
         uses: superfly/flyctl-actions/setup-flyctl@master
 
       - name: Deploy to Fly.io
-        id: deploy
+        if: success()
+        shell: bash
         run: |
           VERSION=${{ steps.version.outputs.version }}
           IS_RELEASE=${{ steps.version.outputs.is_release }}
 
           CONFIG="fly.dev.toml"
           TOKEN="${{ env.FLY_DEV_API_TOKEN }}"
-          DEPLOY_TYPE="development"
-
           if [ "$IS_RELEASE" = "true" ]; then
             CONFIG="fly.production.toml"
             TOKEN="${{ env.FLY_PROD_API_TOKEN }}"
-            DEPLOY_TYPE="production"
           fi
 
-          echo "Deploying $VERSION using $CONFIG"
-          echo "deploy_type=$DEPLOY_TYPE" >> $GITHUB_OUTPUT
-          FLY_API_TOKEN=$TOKEN flyctl deploy --config $CONFIG --remote-only
+          echo "Deploying $VERSION with $CONFIG"
+          export FLY_API_TOKEN="$TOKEN"
+          flyctl deploy --config "$CONFIG" --remote-only
 
-      - name: Tag Git Version
-        if: steps.test.outcome == 'success' && steps.deploy.outcome == 'success'
+      - name: Tag release
+        if: ${{ steps.version.outputs.is_release == 'true' && success() }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          git config user.name github-actions
+          git config user.name  github-actions
           git config user.email github-actions@github.com
           git tag "v$VERSION"
           git push origin "v$VERSION"
 
-      - name: Slack Notify
+      - name: Slack notify
         uses: act10ns/slack@v2
+        if: always()
         with:
-          status: ${{ job.status }}
+          status:  ${{ job.status }}
           channel: '#keja-ci-cd-updates'
           message: |
-            {{#if (eq steps.test.outcome "failure")}}
-              ❌ *Test stage failed*
-              • No version tagged
-            {{else if (eq steps.deploy.outcome "failure")}}
-              ❌ *{{steps.deploy.outputs.deploy_type}} deployment failed*
-              • Version: *v{{ steps.version.outputs.version }}*
-            {{else if (eq steps.version.outputs.is_release "true")}}
-              🚀 *New production release deployed*
-              • Version: *v{{ steps.version.outputs.version }}*
+            {{#if (eq jobStatus "success")}}
+              {{#if (eq env.IS_RELEASE "true")}}
+              🚀 *A new production app has been released*
+              • Version: *v{{ env.VERSION }}*
+              {{else}}
+              ✅ *Dev Deploy Successful*
+              • Version: *v{{ env.VERSION }}*
+              {{/if}}
             {{else}}
-              ✅ *Dev version deployed*
-              • Version: *v{{ steps.version.outputs.version }}*
+              {{#if (eq env.STAGE "tests")}}
+              ❌ *Test stage failed*
+              {{else}}
+                {{#if (eq env.IS_RELEASE "true")}}
+                ❌ *Production deploy failed*
+                • Version: *v{{ env.VERSION }}*
+                {{else}}
+                ❌ *Dev deploy failed*
+                • Version: *v{{ env.VERSION }}*
+                {{/if}}
+              {{/if}}
             {{/if}}
         env:
+          VERSION:    ${{ steps.version.outputs.version }}
+          IS_RELEASE: ${{ steps.version.outputs.is_release }}
+          STAGE:      ${{ env.STAGE }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        if: always()
