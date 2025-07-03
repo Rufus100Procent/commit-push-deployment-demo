@@ -59,7 +59,7 @@ jobs:
           status: failure
           channel: '#keja-ci-cd-updates'
           message: |
-            :test_tube: *Test stage failed*
+            :x: *Test stage failed*
             • Version: -
 
         env:
