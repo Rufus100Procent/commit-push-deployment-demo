@@ -59,7 +59,7 @@ jobs:
           status: failure
           channel: '#keja-ci-cd-updates'
           message: |
-            ❌ *Test stage failed*
+            :test_tube: *Test stage failed*
             • Version: -
 
         env:
@@ -120,7 +120,7 @@ jobs:
           channel: '#keja-ci-cd-updates'
           message: |
             {{#if (eq env.DEPLOY_TYPE "prod")}}
-            🚀 *New production app has been released*
+            :rocket: *New production app has been released*
             • Version: *v{{ env.VERSION }}*
             {{else}}
             ✅ *Dev version deployed*
