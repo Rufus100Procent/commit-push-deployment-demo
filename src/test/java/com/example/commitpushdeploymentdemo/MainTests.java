@@ -8,7 +8,7 @@ class MainTests {
 
     @Test
     void contextLoads() {
-        as
+
     }
 
 }
