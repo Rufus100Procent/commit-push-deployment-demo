@@ -19,7 +19,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          tags: true
+          fetch-tags: true
 
       - name: Determine Version and Release Type
         id: version
@@ -86,20 +86,20 @@ jobs:
         with:
           status: ${{ job.status }}
           channel: '#keja-ci-cd-updates'
-          message: | 
+          message: |
             {{#if (eq jobStatus "success")}}
-            {{#if (eq env.FLY_API_TOKEN "${{ env.FLY_PROD_API_TOKEN }}")}}
-            🚀 *Production Deploy Successful*
-            • Version: *v${{ steps.version.outputs.version }}*
-            • Config: `fly.production.toml`
+              {{#if (eq inputs.is_release "true")}}
+              🚀 *Production Deploy Successful*
+              • Version: *v${{ steps.version.outputs.version }}*
+              • Config: `fly.production.toml`
+              {{else}}
+              ✅ *Dev Deploy Successful*
+              • Version: *v${{ steps.version.outputs.version }}*
+              • Config: `fly.dev.toml`
+              {{/if}}
             {{else}}
-            ✅ *Dev Deploy Successful*
-            • Version: *v${{ steps.version.outputs.version }}*
-            • Config: `fly.dev.toml`
-            {{/if}}
-            {{else}}
-            ❌ *Deploy Failed*
-            • Version: *v${{ steps.version.outputs.version }}*
+              ❌ *Deploy Failed*
+              • Version: *v${{ steps.version.outputs.version }}*
             {{/if}}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
