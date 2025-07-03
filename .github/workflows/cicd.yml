@@ -35,7 +35,7 @@ jobs:
           else
             BASE=$(git tag --sort=-v:refname | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 | sed 's/v//')
             [ -z "$BASE" ] && BASE=$DEFAULT_VERSION
-            VERSION="${BASE}-dev-$(date +%s)"
+            VERSION="${BASE}-dev"
           fi
 
           echo "is_release=$IS_RELEASE" >> $GITHUB_OUTPUT
@@ -59,12 +59,12 @@ jobs:
           IS_RELEASE=${{ steps.version.outputs.is_release }}
 
           CONFIG="fly.dev.toml"
-          TOKEN=${{ env.FLY_DEV_API_TOKEN }}
+          TOKEN="${{ env.FLY_DEV_API_TOKEN }}"
           TYPE="Development"
 
           if [ "$IS_RELEASE" = "true" ]; then
             CONFIG="fly.production.toml"
-            TOKEN=${{ env.FLY_PROD_API_TOKEN }}
+            TOKEN="${{ env.FLY_PROD_API_TOKEN }}"
             TYPE="🚨 *Production*"
           fi
 
