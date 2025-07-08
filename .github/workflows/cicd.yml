@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Determine Version and Release Type
+      - name: Determine  Version and Release Type
         id: version
         run: |
           set -e
