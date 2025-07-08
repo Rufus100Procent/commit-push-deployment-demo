@@ -109,8 +109,8 @@ jobs:
         with:
           status: failure
           channel: '#keja-ci-cd-updates'
-          message: |
-            :x: *${{ env.DEPLOY_TYPE == 'prod' && 'Production' || 'Dev' }} deploy failed*
+          message: | 
+            :x: *${{ env.DEPLOY_TYPE == 'prod' && 'Production' || 'Dev' }} deploy  failed*
             • Version: v${{ env.VERSION }}
 
         env:
